@@ -1,0 +1,8 @@
+{
+  "name": "Rology Live Ultrasound",
+  "description": "Real-time Tele-Collaboration platform for Ultrasound modalities. Features simulated live streaming, annotations, and AI reporting.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
