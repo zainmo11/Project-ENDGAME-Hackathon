@@ -92,6 +92,32 @@ io.on('connection', (socket) => {
         }
     });
 
+    // WebRTC Video Signaling (bidirectional)
+    socket.on('webrtc-video-offer', ({ offer, role }) => {
+        if (currentRoom) {
+            console.log(`[WEBRTC VIDEO] Offer from ${role} (${socket.id})`);
+            socket.to(currentRoom).emit('webrtc-video-offer', { offer, from: socket.id, senderRole: role });
+        }
+    });
+
+    socket.on('webrtc-video-answer', ({ answer, to, role }) => {
+        if (currentRoom) {
+            console.log(`[WEBRTC VIDEO] Answer from ${role} to ${to}`);
+            io.to(to).emit('webrtc-video-answer', { answer, from: socket.id, senderRole: role });
+        }
+    });
+
+    socket.on('webrtc-video-ice-candidate', ({ candidate, to, role }) => {
+        if (currentRoom) {
+            console.log(`[WEBRTC VIDEO] ICE candidate from ${role}`);
+            if (to) {
+                io.to(to).emit('webrtc-video-ice-candidate', { candidate, from: socket.id, senderRole: role });
+            } else {
+                socket.to(currentRoom).emit('webrtc-video-ice-candidate', { candidate, from: socket.id, senderRole: role });
+            }
+        }
+    });
+
     // Handle disconnect
     socket.on('disconnect', () => {
         console.log(`[DISCONNECT] Client disconnected: ${socket.id}`);
