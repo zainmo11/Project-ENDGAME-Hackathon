@@ -4,6 +4,7 @@ import RealSignalingService from '../services/realSignaling';
 import DicomViewer from './DicomViewer';
 import Chat from './Chat';
 import { useWebRTCVoice } from '../hooks/useWebRTCVoice';
+import { useWebRTCVideo } from '../hooks/useWebRTCVideo';
 import { generateReportPDF, downloadPDF, ReportData } from '../utils/pdfGenerator';
 
 interface TechDashboardProps {
@@ -26,6 +27,16 @@ const TechDashboard: React.FC<TechDashboardProps> = ({ roomId, onLeave }) => {
   const { isVoiceActive, isMuted, isRemoteConnected, startVoice, stopVoice, toggleMute } = useWebRTCVoice({
     socket,
     isConnected
+  });
+
+  // WebRTC Video (bidirectional - Tech sends and receives)
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const { isVideoActive, isRemoteConnected: isVideoRemoteConnected, startVideo, stopVideo } = useWebRTCVideo({
+    socket,
+    isConnected,
+    localVideoRef,
+    remoteVideoRef,
+    role: 'TECH',
   });
 
   useEffect(() => {
@@ -84,19 +95,15 @@ const TechDashboard: React.FC<TechDashboardProps> = ({ roomId, onLeave }) => {
   const toggleLive = async () => {
     if (!isLive) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
+        // Start WebRTC video streaming to Radiologist
+        await startVideo();
         setIsLive(true);
       } catch (e) {
-        alert("Camera permission denied or not available. Using Simulation only.");
-        setIsLive(true); // Fallback to just sim state
+        alert("Camera permission denied or not available.");
       }
     } else {
-      // Stop tracks
-      const stream = localVideoRef.current?.srcObject as MediaStream;
-      stream?.getTracks().forEach(track => track.stop());
+      // Stop WebRTC video
+      stopVideo();
       setIsLive(false);
     }
   };
@@ -158,10 +165,19 @@ const TechDashboard: React.FC<TechDashboardProps> = ({ roomId, onLeave }) => {
         {/* Left: Controls & Webcam */}
         <div className="w-80 bg-slate-800 border-r border-slate-700 p-4 flex flex-col gap-6 overflow-y-auto">
 
-          {/* Webcam Preview */}
+          {/* Webcam Preview - Operator */}
           <div className="aspect-video bg-black rounded-lg overflow-hidden border border-slate-600 relative">
             <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
             <div className="absolute bottom-2 left-2 text-[10px] bg-black/50 px-2 py-0.5 rounded">Operator Cam</div>
+          </div>
+
+          {/* Radiologist Camera - Remote */}
+          <div className="aspect-video bg-black rounded-lg overflow-hidden border border-slate-600 relative">
+            <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+            <div className="absolute bottom-2 left-2 flex items-center gap-2 text-[10px] bg-black/50 px-2 py-0.5 rounded">
+              <div className={`w-2 h-2 rounded-full ${isVideoRemoteConnected ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`}></div>
+              <span>{isVideoRemoteConnected ? 'Radiologist Cam (Live)' : 'Radiologist Cam (Waiting...)'}</span>
+            </div>
           </div>
 
           {/* Controls */}

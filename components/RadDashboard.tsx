@@ -5,6 +5,7 @@ import DicomViewer from './DicomViewer';
 import Chat from './Chat';
 import ReportSidebar from './ReportSidebar';
 import { useWebRTCVoice } from '../hooks/useWebRTCVoice';
+import { useWebRTCVideo } from '../hooks/useWebRTCVideo';
 import { ReportData } from '../utils/pdfGenerator';
 
 interface RadDashboardProps {
@@ -29,12 +30,21 @@ const RadDashboard: React.FC<RadDashboardProps> = ({ roomId, onLeave }) => {
   const annotationCanvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [socket, setSocket] = useState<any>(null);
-  const streamRef = useRef<MediaStream | null>(null); // Prevent camera recreation
 
   // WebRTC Voice
   const { isVoiceActive, isMuted, isRemoteConnected, startVoice, stopVoice, toggleMute } = useWebRTCVoice({
     socket,
     isConnected
+  });
+
+  // WebRTC Video (bidirectional - Radiologist sends and receives)
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const { isVideoActive, isRemoteConnected: isVideoConnected, startVideo, stopVideo } = useWebRTCVideo({
+    socket,
+    isConnected,
+    localVideoRef,
+    remoteVideoRef,
+    role: 'RADIOLOGIST',
   });
 
   useEffect(() => {
@@ -57,7 +67,7 @@ const RadDashboard: React.FC<RadDashboardProps> = ({ roomId, onLeave }) => {
         if (event.payload.depth !== undefined) setRemoteDepth(event.payload.depth);
         if (event.payload.isLive !== undefined) {
           setIsLive(event.payload.isLive);
-          if (event.payload.isLive) simulateRemoteStream();
+          // Video will come through WebRTC automatically
         }
       }
     });
@@ -68,24 +78,6 @@ const RadDashboard: React.FC<RadDashboardProps> = ({ roomId, onLeave }) => {
       signaling.current?.close();
     };
   }, [roomId]);
-
-  // Hacky simulation of receiving a stream for the demo without a TURN server
-  const simulateRemoteStream = async () => {
-    // Only start stream once
-    if (streamRef.current) return;
-
-    try {
-      // In a real app, this comes from WebRTC peer. 
-      // For localhost demo, we just grab local cam to show "video is working"
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      streamRef.current = stream;
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = stream;
-      }
-    } catch (e) {
-      console.warn("Could not simulate remote stream via local cam");
-    }
-  };
 
   const handleSendMessage = (text: string) => {
     const msg: ChatMessage = {
@@ -212,6 +204,24 @@ const RadDashboard: React.FC<RadDashboardProps> = ({ roomId, onLeave }) => {
               </button>
             </>
           )}
+          {/* Camera Control */}
+          {!isVideoActive ? (
+            <button
+              onClick={startVideo}
+              className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm font-semibold"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+              Start Camera
+            </button>
+          ) : (
+            <button
+              onClick={stopVideo}
+              className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded text-sm font-semibold"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+              Stop Camera
+            </button>
+          )}
           <button onClick={() => setShowReport(true)} className="flex items-center gap-2 px-4 py-1.5 bg-rology-accent text-slate-900 font-bold rounded hover:bg-cyan-400 transition">
             Generate Report
           </button>
@@ -301,9 +311,12 @@ const RadDashboard: React.FC<RadDashboardProps> = ({ roomId, onLeave }) => {
         {/* Right: Sidebar */}
         <div style={{ width: sidebarWidth }} className="flex flex-col border-l border-slate-700 bg-slate-900 shrink-0">
           {/* Remote Webcam - Expandable */}
-          <div className={`${isCamExpanded ? 'h-80' : 'h-48'} bg-black border-b border-slate-700 relative transition-all duration-300`}>
+          <div className={`${isCamExpanded ? 'h-80' : ''} bg-black border-b border-slate-700 relative transition-all duration-300`}>
             <video ref={remoteVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
-            <div className="absolute bottom-2 left-2 text-[10px] bg-black/50 px-2 py-0.5 rounded">Tech Room Cam</div>
+            <div className="absolute bottom-2 left-2 flex items-center gap-2 text-[10px] bg-black/50 px-2 py-0.5 rounded">
+              <div className={`w-2 h-2 rounded-full ${isVideoConnected ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`}></div>
+              <span>{isVideoConnected ? 'Tech Room Cam (Live)' : 'Tech Room Cam (Waiting...)'}</span>
+            </div>
             <button
               onClick={() => setIsCamExpanded(!isCamExpanded)}
               className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 rounded transition"
@@ -319,6 +332,15 @@ const RadDashboard: React.FC<RadDashboardProps> = ({ roomId, onLeave }) => {
                 </svg>
               )}
             </button>
+          </div>
+
+          {/* Radiologist Own Cam Preview */}
+          <div className="bg-black border-b border-slate-700 relative">
+            <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+            <div className="absolute bottom-2 left-2 flex items-center gap-2 text-[10px] bg-black/50 px-2 py-0.5 rounded">
+              <div className={`w-2 h-2 rounded-full ${isVideoActive ? 'bg-green-500' : 'bg-slate-500'}`}></div>
+              <span>{isVideoActive ? 'Your Camera (Live)' : 'Your Camera (Off)'}</span>
+            </div>
           </div>
 
           {/* Chat */}
