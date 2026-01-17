@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Rology Live - Ultrasound Tele-Collaboration</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -11,35 +12,54 @@
           extend: {
             colors: {
               rology: {
-                900: '#0f172a',
-                800: '#1e293b',
-                700: '#334155',
-                500: '#3b82f6',
-                400: '#60a5fa',
-                accent: '#06b6d4', // Cyan
+                // Very dark backgrounds (almost black)
+                950: '#0a0a0f',
+                900: '#0d1117',
+                850: '#111318',
+                800: '#161b22',
+                750: '#1a1f2e',
+                700: '#21262d',
+                600: '#2d333b',
+                // Blue accents
+                500: '#0066ff',
+                400: '#2f81f7',
+                300: '#58a6ff',
+                // Cyan accent
+                accent: '#00bcd4',
               }
             },
             fontFamily: {
-              mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', "Liberation Mono", "Courier New", 'monospace'],
+              sans: ['Inter', 'system-ui', 'sans-serif'],
+              mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
             }
           }
         }
       }
     </script>
     <style>
-      /* Custom scrollbar for chat */
+      body {
+        font-family: 'Inter', system-ui, sans-serif;
+      }
+      /* Custom scrollbar */
       ::-webkit-scrollbar {
-        width: 8px;
+        width: 6px;
+        height: 6px;
       }
       ::-webkit-scrollbar-track {
-        background: #1e293b; 
+        background: #161b22; 
       }
       ::-webkit-scrollbar-thumb {
-        background: #475569; 
-        border-radius: 4px;
+        background: #30363d; 
+        border-radius: 3px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #64748b; 
+        background: #484f58; 
+      }
+      /* Input focus styles */
+      input:focus, textarea:focus, select:focus {
+        outline: none;
+        border-color: #0066ff !important;
+        box-shadow: 0 0 0 2px rgba(0, 102, 255, 0.2);
       }
     </style>
   <script type="importmap">
@@ -53,7 +73,7 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-rology-900 text-white overflow-hidden">
+  <body class="bg-rology-950 text-white overflow-hidden">
     <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>

@@ -20,19 +20,23 @@ cornerstoneWADOImageLoader.webWorkerManager.initialize({
 });
 
 interface DicomViewerProps {
-    dicomUrl?: string;
+    urls: string[];
     className?: string;
     onLoad?: () => void;
     gain?: number;
     depth?: number;
+    frame: number;
+    onFrameChange: (frame: number) => void;
 }
 
 const DicomViewer: React.FC<DicomViewerProps> = ({
-    dicomUrl = '/sample.dcm',
+    urls = [],
     className = '',
     onLoad,
     gain = 50,
-    depth = 15
+    depth = 15,
+    frame = 0,
+    onFrameChange
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [isLoaded, setIsLoaded] = useState(false);
@@ -66,35 +70,47 @@ const DicomViewer: React.FC<DicomViewerProps> = ({
 
     useEffect(() => {
         const element = containerRef.current;
-        if (!element) return;
+        if (!element || urls.length === 0) return;
 
         // Enable the element for cornerstone
         cornerstone.enable(element);
 
         // Load and display the DICOM image
-        const imageId = `wadouri:${window.location.origin}${dicomUrl}`;
+        const currentUrl = urls[Math.min(frame, urls.length - 1)];
+        const imageId = `wadouri:${window.location.origin}${currentUrl}`;
 
         cornerstone.loadImage(imageId)
             .then((image: any) => {
-                // Get default viewport
-                const viewport = cornerstone.getDefaultViewportForImage(element, image);
+                // Get default viewport or keep existing
+                let viewport;
+                try {
+                     viewport = cornerstone.getViewport(element);
+                } catch(e) {}
+                
+                if (!viewport) {
+                     viewport = cornerstone.getDefaultViewportForImage(element, image);
+                }
 
                 // Apply gain/contrast adjustment (window width/center)
-                viewport.voi = {
-                    windowWidth: 400 - (gain - 50) * 4,
-                    windowCenter: 40 + (gain - 50) * 2
-                };
+                // We preserve other viewport properties (zoom/pan) when changing frames if possible
+                if (viewport) {
+                    viewport.voi = {
+                        windowWidth: 400 - (gain - 50) * 4,
+                        windowCenter: 40 + (gain - 50) * 2
+                    };
+                }
 
                 // Display the image
                 cornerstone.displayImage(element, image, viewport);
 
                 setIsLoaded(true);
-                setImageInfo(`${image.width}x${image.height}`);
+                setImageInfo(`${image.width}x${image.height} | Frame ${frame + 1}/${urls.length}`);
 
-                // Fit to window after a short delay
-                setTimeout(fitToWindow, 100);
-
-                onLoad?.();
+                // Fit to window only on first load
+                if (!isLoaded) {
+                     setTimeout(fitToWindow, 100);
+                     onLoad?.();
+                }
             })
             .catch((err: Error) => {
                 console.error('Error loading DICOM:', err);
@@ -108,21 +124,14 @@ const DicomViewer: React.FC<DicomViewerProps> = ({
         // Cleanup
         return () => {
             window.removeEventListener('resize', handleResize);
-            if (element) {
-                try {
-                    cornerstone.disable(element);
-                } catch (e) {
-                    // Element might already be disabled
-                }
-            }
+            // Don't disable here to avoid flickering between frame updates
         };
-    }, [dicomUrl]);
+    }, [frame, urls, gain]); // Re-run when frame changes
 
-    // Update viewport when gain changes
+    // Update viewport when gain changes (redundant due to dependency above but good for explicit updates)
     useEffect(() => {
         const element = containerRef.current;
         if (!element || !isLoaded) return;
-
         try {
             const viewport = cornerstone.getViewport(element);
             if (viewport) {
@@ -132,22 +141,26 @@ const DicomViewer: React.FC<DicomViewerProps> = ({
                 };
                 cornerstone.setViewport(element, viewport);
             }
-        } catch (e) {
-            // Viewport not ready
-        }
+        } catch (e) {}
     }, [gain, isLoaded]);
 
-    // Handle mouse wheel for zoom
+    // Handle mouse wheel for scrolling frames
     const handleWheel = (e: React.WheelEvent) => {
         const element = containerRef.current;
         if (!element || !isLoaded) return;
 
         e.preventDefault();
-        const viewport = cornerstone.getViewport(element);
-        if (viewport) {
-            const scaleFactor = e.deltaY > 0 ? 0.95 : 1.05;
-            viewport.scale *= scaleFactor;
-            cornerstone.setViewport(element, viewport);
+        
+        // Scroll Logic
+        if (urls.length > 1) {
+            const direction = e.deltaY > 0 ? 1 : -1;
+            let newFrame = frame + direction;
+            if (newFrame < 0) newFrame = 0;
+            if (newFrame >= urls.length) newFrame = urls.length - 1;
+            
+            if (newFrame !== frame) {
+                onFrameChange(newFrame);
+            }
         }
     };
 
@@ -157,6 +170,7 @@ const DicomViewer: React.FC<DicomViewerProps> = ({
         if (!element || !isLoaded) return;
 
         cornerstone.reset(element);
+        fitToWindow();
     };
 
     return (
@@ -191,7 +205,7 @@ const DicomViewer: React.FC<DicomViewerProps> = ({
             {/* Info overlay */}
             {isLoaded && (
                 <div className="absolute bottom-2 right-2 text-[10px] text-cyan-400 bg-black/50 px-2 py-1 rounded">
-                    DICOM {imageInfo} | Scroll: Zoom | Double-click: Reset
+                    DICOM {imageInfo} | Scroll: Change Frame | Double-click: Reset
                 </div>
             )}
         </div>
